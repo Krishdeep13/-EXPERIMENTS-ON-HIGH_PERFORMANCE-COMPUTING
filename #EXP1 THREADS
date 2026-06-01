@@ -1,0 +1,29 @@
+#include <stdio.h>
+#include <pthread.h>
+#include <unistd.h>
+
+void *routine(void *arg)
+{
+    printf("YES PRINTING\n");
+    sleep(2);
+    printf("DONE\n");
+
+    return NULL;
+}
+
+int main(void)
+{
+    pthread_t kd1, kd2, kd3, kd4;
+
+    pthread_create(&kd1, NULL, routine, NULL);
+    pthread_create(&kd2, NULL, routine, NULL);
+    pthread_create(&kd3, NULL, routine, NULL);
+    pthread_create(&kd4, NULL, routine, NULL);
+
+    pthread_join(kd1, NULL);
+    pthread_join(kd2, NULL);
+    pthread_join(kd3, NULL);
+    pthread_join(kd4, NULL);
+
+    return 0;
+}
