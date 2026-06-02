@@ -865,3 +865,337 @@ Good performance comes from helping the scheduler:
 * Avoid unnecessary waiting.
 * Minimize communication.
 * Maximize useful computation.
+# Experiment 02: Understanding Threads, Shared Memory, Execution Order, and Mutexes
+
+## Question 1: How is the execution order determined?
+
+### Observation
+
+When multiple threads are created using `pthread_create()`, they do not execute in the order they were written in the source code.
+
+Example:
+
+```c
+pthread_create(&t1,NULL,routine1,NULL);
+pthread_create(&t2,NULL,routine2,NULL);
+```
+
+This does **not** guarantee:
+
+```text
+routine1 executes first
+routine2 executes second
+```
+
+### Why?
+
+After a thread is created, control is handed to the Operating System scheduler.
+
+The scheduler decides:
+
+* Which thread runs first.
+* How long it runs.
+* When it is paused.
+* When another thread gets CPU time.
+
+The scheduler makes these decisions based on:
+
+* Available CPU cores.
+* System load.
+* Scheduling policy.
+* Thread priorities.
+
+Therefore execution order becomes non-deterministic.
+
+### Example
+
+Possible run 1:
+
+```text
+Thread 1 starts
+Thread 2 starts
+Thread 1 finishes
+Thread 2 finishes
+```
+
+Possible run 2:
+
+```text
+Thread 2 starts
+Thread 1 starts
+Thread 2 finishes
+Thread 1 finishes
+```
+
+Both are valid.
+
+---
+
+## Question 2: How is memory shared between threads?
+
+### Observation
+
+Threads inside the same process share the same address space.
+
+Shared resources:
+
+* Global variables
+* Heap memory
+* Open files
+* Program code
+
+Private resources:
+
+* Registers
+* Program Counter
+* Stack
+
+### Example
+
+```c
+int x = 0;
+```
+
+Thread A:
+
+```c
+x++;
+```
+
+Thread B:
+
+```c
+printf("%d\n",x);
+```
+
+Since both threads access the same memory location, Thread B may observe the modification made by Thread A.
+
+Memory view:
+
+```text
+Process Memory
+
+Global Variables
+    x = 1
+
+Heap
+
+Code
+
+     |
+     |
+     +------ Thread 1
+     |
+     +------ Thread 2
+```
+
+All threads access the same global memory.
+
+---
+
+## Question 3: What is a Race Condition?
+
+### Definition
+
+A race condition occurs when multiple threads access the same memory location and at least one thread modifies it.
+
+The final result depends on execution timing.
+
+### Example
+
+Initial value:
+
+```c
+x = 0;
+```
+
+Thread 1:
+
+```c
+x++;
+```
+
+Thread 2:
+
+```c
+x++;
+```
+
+Expected:
+
+```text
+x = 2
+```
+
+Actual:
+
+```text
+x = 1
+```
+
+may occur.
+
+### Why?
+
+Increment is not a single operation.
+
+The CPU performs:
+
+```text
+Read x
+Add 1
+Write x
+```
+
+Possible execution:
+
+```text
+Thread 1 reads x = 0
+
+Thread 2 reads x = 0
+
+Thread 1 writes 1
+
+Thread 2 writes 1
+```
+
+One update is lost.
+
+This is called a race condition.
+
+---
+
+## Question 4: How do Mutexes prevent race conditions?
+
+### Definition
+
+Mutex = Mutual Exclusion
+
+A mutex ensures that only one thread can enter a critical section at a time.
+
+### Example
+
+```c
+pthread_mutex_lock(&lock);
+
+x++;
+
+pthread_mutex_unlock(&lock);
+```
+
+Execution:
+
+```text
+Thread 1 acquires lock
+
+Thread 2 waits
+
+Thread 1 updates x
+
+Thread 1 releases lock
+
+Thread 2 acquires lock
+
+Thread 2 updates x
+```
+
+Final result:
+
+```text
+x = 2
+```
+
+Correct and deterministic.
+
+---
+
+## Question 5: What is the trade-off of using a Mutex?
+
+### Advantage
+
+Correct results.
+
+Prevents data corruption.
+
+Ensures synchronization.
+
+### Disadvantage
+
+Reduces parallelism.
+
+Threads spend time waiting.
+
+Example:
+
+Without mutex:
+
+```text
+4 threads execute simultaneously
+```
+
+With mutex:
+
+```text
+Only one thread enters critical section
+
+Others wait
+```
+
+Thus:
+
+```text
+More correctness
+Less parallelism
+```
+
+This is one of the most fundamental trade-offs in High Performance Computing.
+
+---
+
+## Question 6: Why are Threads useful?
+
+Threads are useful when tasks share data and need lightweight communication.
+
+Examples:
+
+* Matrix multiplication
+* Numerical simulations
+* Image processing
+* Scientific computing
+* HPC kernels
+
+Advantages:
+
+* Shared memory
+* Fast communication
+* Low creation cost
+* Efficient resource utilization
+
+---
+
+## Question 7: Why are Processes useful?
+
+Processes provide isolation.
+
+Each process owns its own memory space.
+
+Advantages:
+
+* Fault isolation
+* Better security
+* Independent execution
+* No accidental memory corruption
+
+Examples:
+
+* Web browsers
+* Databases
+* Operating system services
+
+If one process crashes, other processes usually continue running.
+
+---
+
+## Key Takeaways
+
+1. Threads share memory
