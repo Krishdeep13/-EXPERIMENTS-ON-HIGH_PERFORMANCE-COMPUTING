@@ -1,0 +1,22 @@
+#include <stdio.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <sys/types.h>   #Defines standard system data type aliases like pid_t for process IDs to ensure code portability.
+#include <sys/wait.h>    #Provides functions and macros, like wait() and WIFEXITED, to pause parent processes and track child process status.
+int main(){
+int x=2;
+int pid =fork();
+if(pid==-1){
+return 1;
+}
+if(pid==0){
+x++;
+printf("CHILD: %d\n",x);
+}
+sleep(2);
+printf("%d\n",x);
+if(pid!=0){
+wait(NULL);              #Pauses the parent process until any child process finishes, completely ignoring the child's specific exit status code.
+}
+return 0;
+}
