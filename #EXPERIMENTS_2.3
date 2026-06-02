@@ -1,0 +1,29 @@
+#include <stdio.h>
+#include <pthread.h>
+int counter=0;
+pthread_mutex_t lock;            #Declares a mutex (mutual exclusion lock) object that allows only one 
+for(int i=0;i<100000;i++){       #thread at a time to enter a critical section, preventing race conditions when accessing shared data.
+void *routine(void *arg){
+pthread_mutex_lock(&lock);
+counter++;
+pthread_mutex_unlock(&lock);
+}
+return NULL;
+}
+int main(){
+    pthread_t t1,t2;
+    pthread_mutex_init(&lock,NULL);
+
+    pthread_create(&t1,NULL,routine,NULL);
+    pthread_create(&t2,NULL,routine,NULL);
+
+    pthread_join(t1,NULL);
+    pthread_join(t2,NULL);
+
+    pthread_mutex_destroy(&lock);
+
+    printf("Counter = %d\n",counter);
+
+    return 0;
+
+}
