@@ -1304,3 +1304,211 @@ This principle appears in thread-level parallelism, distributed-memory systems, 
 ### Key Takeaway
 
 The primary challenge in parallel computing is not creating threads, but minimizing synchronization and communication between them. Efficient parallel algorithms maximize local work while minimizing contention, data movement, and coordination overhead.
+# Experiment 3: Local Computation and Result Aggregation using Threads
+
+## Objective
+
+Demonstrate how multiple threads can independently process different portions of a dataset, produce local results, and return those results to the main thread for final aggregation.
+
+---
+
+## Program Structure
+
+The array:
+
+```c
+int primes[10]={2,3,5,7,11,13,17,19,23,29};
+```
+
+contains 10 prime numbers.
+
+Two threads are created.
+
+Each thread receives a starting index and computes the sum of 5 consecutive elements.
+
+### Thread 1
+
+Processes:
+
+```text
+2 + 3 + 5 + 7 + 11
+```
+
+Local Sum:
+
+```text
+28
+```
+
+### Thread 2
+
+Processes:
+
+```text
+13 + 17 + 19 + 23 + 29
+```
+
+Local Sum:
+
+```text
+101
+```
+
+---
+
+## Passing Arguments to Threads
+
+Before creating a thread:
+
+```c
+int *a = malloc(sizeof(int));
+*a = i * 5;
+```
+
+Dynamic memory is allocated to store the starting index.
+
+The pointer is passed to the thread:
+
+```c
+pthread_create(&th[i], NULL, routine, a);
+```
+
+The thread receives this pointer through:
+
+```c
+void* routine(void *arg)
+```
+
+and extracts the value:
+
+```c
+int index = *(int*)arg;
+```
+
+---
+
+## Returning Data from Threads
+
+After computing the local sum:
+
+```c
+*(int*)arg = sum;
+return arg;
+```
+
+The thread reuses the same allocated memory to store the computed result and returns the pointer back to the main thread.
+
+The main thread retrieves the returned pointer using:
+
+```c
+pthread_join(th[i], (void**)&r);
+```
+
+and accesses the result through:
+
+```c
+global += *r;
+```
+
+---
+
+## Global Reduction
+
+Each thread computes its result independently.
+
+The main thread performs the final reduction:
+
+```c
+global = local_sum_1 + local_sum_2;
+```
+
+Result:
+
+```text
+28 + 101 = 129
+```
+
+---
+
+## Why Does the Output Order Change?
+
+Run 1:
+
+```text
+LOCAL SUM: 101
+LOCAL SUM: 28
+GLOBAL SUM: 129
+```
+
+Run 2:
+
+```text
+LOCAL SUM: 28
+LOCAL SUM: 101
+GLOBAL SUM: 129
+```
+
+The output order is non-deterministic because thread scheduling is controlled by the operating system scheduler.
+
+After thread creation:
+
+```c
+pthread_create(...)
+```
+
+both threads become runnable.
+
+The scheduler may:
+
+* Execute Thread 1 first
+* Execute Thread 2 first
+* Switch between them at any time
+
+Therefore the order of intermediate outputs is not guaranteed.
+
+---
+
+## Deterministic vs Non-Deterministic Behavior
+
+### Deterministic
+
+```text
+GLOBAL SUM = 129
+```
+
+This remains constant because the main thread waits for both worker threads using:
+
+```c
+pthread_join(...)
+```
+
+before computing the final result.
+
+### Non-Deterministic
+
+```text
+LOCAL SUM: 28
+LOCAL SUM: 101
+```
+
+or
+
+```text
+LOCAL SUM: 101
+LOCAL SUM: 28
+```
+
+The order varies because execution timing depends on scheduler decisions.
+
+---
+
+## HPC Perspective
+
+This program demonstrates a fundamental parallel computing principle:
+
+1. Partition the data.
+2. Compute locally and independently.
+3. Minimize communication during computation.
+4. Aggregate results through a final reduction step.
+
+This approach scales significantly better than repeatedly synchronizing threads on a shared variable and forms the basis of many communication-avoiding and distributed-memory algorithms.
