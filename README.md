@@ -1232,3 +1232,75 @@ Unlike ordinary variables, mutexes interact with:
 * Atomic CPU synchronization instructions
 
 This additional coordination overhead makes mutex operations significantly more expensive than normal memory accesses, but necessary for preventing race conditions and ensuring correctness in multithreaded programs.
+## Parallel Execution, Contention, and Data Locality
+
+### Case 1: Shared Counter Without Synchronization
+
+Multiple threads concurrently update the same memory location without coordination.
+
+Characteristics:
+
+* Maximum theoretical parallelism
+* Undefined behavior due to race conditions
+* Lost updates caused by overlapping read-modify-write sequences
+* Non-deterministic results
+* Incorrect execution despite high concurrency
+
+This model exposes the correctness problem of shared-memory parallel programming.
+
+---
+
+### Case 2: Shared Counter With Mutex Protection
+
+Threads synchronize access to the shared variable using a mutex.
+
+Characteristics:
+
+* Correct and deterministic execution
+* Mutual exclusion guarantees data consistency
+* Shared resource becomes a serialized critical section
+* Threads execute concurrently but compete for ownership of the lock
+* Lock acquisition introduces scheduling and synchronization overhead
+
+This model demonstrates contention, where parallel threads exist but progress is limited by a sequentially accessed shared resource.
+
+#### Technical Insight
+
+Parallelism and scalability are not equivalent.
+
+A program may execute with many threads simultaneously, yet achieve poor speedup if all threads repeatedly synchronize on the same shared resource.
+
+Contention reduces parallel efficiency by converting computational progress into waiting time.
+
+---
+
+### Case 3: Thread-Local Computation with Final Reduction
+
+Each thread maintains its own private data and performs computation independently. Results are combined only after all threads complete execution.
+
+Characteristics:
+
+* No shared-state contention during computation
+* No mutex overhead
+* No synchronization within the main computational loop
+* Maximum utilization of available cores
+* Communication deferred to a single reduction phase
+
+This model follows a communication-avoiding design philosophy by replacing frequent synchronization with local computation and minimal final communication.
+
+#### Technical Insight
+
+High-performance computing systems favor data locality and computation independence over shared-state synchronization.
+
+A common optimization strategy is:
+
+* Replicate data when necessary
+* Perform computation locally
+* Minimize communication frequency
+* Aggregate results only when required
+
+This principle appears in thread-level parallelism, distributed-memory systems, communication-avoiding linear algebra, and large-scale scientific computing algorithms.
+
+### Key Takeaway
+
+The primary challenge in parallel computing is not creating threads, but minimizing synchronization and communication between them. Efficient parallel algorithms maximize local work while minimizing contention, data movement, and coordination overhead.
