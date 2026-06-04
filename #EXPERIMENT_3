@@ -36,3 +36,16 @@ free(r);
 }
 printf("GLOBAL SUM: %d\n",global);
 }
+
+/*
+ krishdeepsingh@KRISHDEEPs-MacBook-Pro ~ % nano m2.c
+krishdeepsingh@KRISHDEEPs-MacBook-Pro ~ % clang -O0 m2.c -o m
+krishdeepsingh@KRISHDEEPs-MacBook-Pro ~ % ./m
+LOCAL SUM: 101
+LOCAL SUM: 28
+GLOBAL SUM: 129
+krishdeepsingh@KRISHDEEPs-MacBook-Pro ~ % ./m
+LOCAL SUM: 28
+LOCAL SUM: 101
+GLOBAL SUM: 129
+*/     ### WHY? ###
