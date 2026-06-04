@@ -1196,6 +1196,39 @@ If one process crashes, other processes usually continue running.
 
 ---
 
-## Key Takeaways
+## What is `pthread_mutex_t lock`?
 
-1. Threads share memory
+`pthread_mutex_t lock` creates a mutex object used for thread synchronization. It provides mutual exclusion by ensuring that only one thread can access a critical section at a time.
+
+### Internal Information Maintained by a Mutex
+
+* Lock state (Locked / Unlocked)
+* Owner thread information
+* Waiting thread queue
+* Mutex attributes and configuration
+* Scheduler and OS synchronization metadata
+
+### Why is the Variable Needed?
+
+The mutex variable represents the synchronization object itself. Functions such as:
+
+```c
+pthread_mutex_lock(&lock);
+pthread_mutex_unlock(&lock);
+```
+
+must operate on a specific mutex instance. Without the variable, the operating system would have no synchronization object to manage.
+
+### Technical Insight
+
+A mutex is a shared synchronization data structure used by the operating system and scheduler to coordinate concurrent access to shared memory.
+
+Unlike ordinary variables, mutexes interact with:
+
+* Thread scheduling
+* Ownership tracking
+* Waiting queues
+* Wake-up mechanisms
+* Atomic CPU synchronization instructions
+
+This additional coordination overhead makes mutex operations significantly more expensive than normal memory accesses, but necessary for preventing race conditions and ensuring correctness in multithreaded programs.
