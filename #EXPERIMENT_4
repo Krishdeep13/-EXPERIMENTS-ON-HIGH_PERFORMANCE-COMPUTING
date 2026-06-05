@@ -1,0 +1,54 @@
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+pthread_mutex_t mutexLock; //DATA TYPE FOR MUTUAL EXECUTION LOCK
+pthread_cond_t condFuel;   // DATA TYPE FOR THE CONDITION VARAIBLE SIGNALING MECHANISM
+int fuel=0;
+void *fuel_filling(void* arg){
+pthread_mutex_lock(&mutexLock);
+fuel+=50;
+pthread_mutex_unlock(&mutexLock);
+pthread_cond_signal(&condFuel);
+return NULL;
+}
+void *car(void *arg){
+pthread_mutex_lock(&mutexLock);
+while(fuel<40){
+printf("NO FUEL, WAITING......\n");
+pthread_cond_wait(&condFuel,&mutexLock);
+}
+
+
+
+fuel-=40;
+printf("GOT FUEL, NOW LEFT : %d\n",fuel);
+pthread_mutex_unlock(&mutexLock);
+return NULL;
+}
+int main(){
+pthread_t th[2];
+pthread_mutex_init(&mutexLock,NULL);
+pthread_cond_init(&condFuel,NULL);
+
+for(int i=0;i<2;i++){
+if(i==1){
+if(pthread_create(&th[i],NULL,&fuel_filling,NULL)!=0){
+perror("FAILED TO CREATE A THREAD!");
+}
+}
+else{
+if(pthread_create(&th[i],NULL,&car,NULL)!=0){
+perror("FAILED TO CREATE A THREAD!");
+}
+}
+}
+for(int i=0;i<2;i++){
+if(pthread_join(th[i],NULL)!=0){
+perror("FAILED TO JOIN THREAD!");
+}
+}
+pthread_mutex_destroy(&mutexLock);
+pthread_cond_destroy(&condFuel);
+return 0;
+}
