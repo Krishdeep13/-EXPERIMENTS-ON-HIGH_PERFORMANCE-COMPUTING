@@ -1,0 +1,87 @@
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <time.h>
+#include <semaphore.h> // ◄--- NEW LIBRARY: Includes native POSIX semaphores
+
+// Shared Kitchen Data
+sem_t stovesRoom;             // The counting semaphore (The Waiting Room)
+pthread_mutex_t fuelMutex;    // A single mutex just to protect the fuel array data
+int stoveFuel[4] = { 100, 100, 100, 100 };
+
+void* routine(void* args) {
+    long chef_id = (long)args;
+
+    printf("👨‍🍳 Chef %ld arrived in the kitchen and is waiting for a free stove...\n", chef_id);
+    
+    // 1. ENTRY: Try to acquire a stove token. If counter is 0, sleep here automatically!
+    sem_wait(&stovesRoom); 
+    
+    // --- COOKING PHASE (Exactly 4 chefs can be in this zone at the same time) ---
+    
+    // Lock the fuel array quickly to find an available stove with fuel
+    pthread_mutex_lock(&fuelMutex);
+    int chosenStove = -1;
+    for (int i = 0; i < 4; i++) {
+        if (stoveFuel[i] > 0) {
+            chosenStove = i;
+            break;
+        }
+    }
+    
+    int fuelNeeded = (rand() % 30) + 1; // Need 1 to 30 units of fuel
+    
+    if (chosenStove == -1 || stoveFuel[chosenStove] - fuelNeeded < 0) {
+        printf("  ❌ Chef %ld found Stove %d has no fuel left! Going home.\n", chef_id, chosenStove);
+        pthread_mutex_unlock(&fuelMutex);
+    } else {
+        stoveFuel[chosenStove] -= fuelNeeded;
+        printf("  🔥 Chef %ld is cooking on Stove %d. (Fuel left: %d)\n", chef_id, chosenStove, stoveFuel[chosenStove]);
+        pthread_mutex_unlock(&fuelMutex);
+        
+        // Simulate cooking time
+        usleep(500000); 
+        printf("  🍳 Chef %ld finished cooking on Stove %d!\n", chef_id, chosenStove);
+    }
+
+    // 2. EXIT: Release the stove token. This automatically wakes up EXACTLY ONE waiting chef!
+    sem_post(&stovesRoom); 
+
+    return NULL;
+}
+
+int main(int argc, char* argv[]) {
+    srand(time(NULL));
+    pthread_t th[10];
+    
+    // Initialize the single data mutex
+    pthread_mutex_init(&fuelMutex, NULL);
+    
+    // INITIALIZE SEMAPHORE:
+    // Arg 1: Pointer to semaphore
+    // Arg 2: 0 means shared between threads of this process
+    // Arg 3: 4 is the initial value (representing our 4 available stoves)
+    sem_init(&stovesRoom, 0, 4); 
+
+    // Create 10 Chef threads
+    for (long i = 0; i < 10; i++) {
+        if (pthread_create(&th[i], NULL, &routine, (void*)i) != 0) {
+            perror("Failed to create thread");
+        }
+    }
+
+    // Join 10 Chef threads
+    for (int i = 0; i < 10; i++) {
+        if (pthread_join(th[i], NULL) != 0) {
+            perror("Failed to join thread");
+        }
+    }
+    
+    // Clean up
+    pthread_mutex_destroy(&fuelMutex);
+    sem_destroy(&stovesRoom); // Destroy the semaphore
+    
+    printf("\n🎉 Kitchen closed successfully! All chefs cooked without traffic jams.\n");
+    return 0;
+}
