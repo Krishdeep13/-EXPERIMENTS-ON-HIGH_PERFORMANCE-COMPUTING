@@ -85,3 +85,59 @@ int main(int argc, char* argv[]) {
     printf("\n🎉 Kitchen closed successfully! All chefs cooked without traffic jams.\n");
     return 0;
 }
+
+
+
+
+# Kitchen Synchronization: From Polling to Counting Semaphores
+
+This document explains how to orchestrate a multi-threaded parallel resource environment (10 Chefs sharing 4 Stoves) cleanly and efficiently using a **POSIX Counting Semaphore**, completely eliminating the "Thundering Herd" problem and CPU lock-starvation.
+
+---
+
+## 1. What is a Counting Semaphore?
+
+A **Mutex** is a binary lock on a single resource (either locked or unlocked). 
+
+A **Counting Semaphore** (`sem_t`) is a kernel-level variable designed to manage access to a *pool* of identical resources (like 4 parking spots or 4 stoves). 
+
+It consists of two components managed atomically by the Operating System:
+1. **An Integer Counter:** Represents how many resource tokens are currently available.
+2. **An Internal Waiting Queue:** A First-In, First-Out (FIFO) list tracking threads that are currently asleep, waiting for a resource.
+
+
+
+---
+
+## 2. The Architectural Shift: Polling vs. Token Exchange
+
+* **The Old Way (Distributed Polling):** Threads used `pthread_mutex_trylock` inside a loop, walking down an array of locks. If a resource was busy, they spun around or slept manually via `usleep()`, constantly burning CPU cycles to re-check availability.
+* **The New Way (Token State Machine):** Threads interact exclusively with a central semaphore entrance. If a token is free, they take it and proceed. If tokens are depleted (counter = 0), the OS freezes the thread instantly, dropping its CPU utilization to **0%**.
+
+---
+
+## 3. Low-Level Mechanics: The Atomic Instructions
+
+The semaphore guarantees a perfect 1-to-1 handoff without waking unnecessary threads through two fundamental operations:
+
+### A. `sem_wait()` (The Entry Gate)
+When a thread requests a resource, the OS executes these instructions atomically:
+1. Read the current semaphore counter value.
+2. **IF** `counter > 0`:
+   * Decrement the counter by 1.
+   * Allow the thread to pass through immediately.
+3. **ELSE** (`counter == 0`):
+   * Place this thread's ID into the semaphore's internal Waiting Queue.
+   * Set the thread's status to `BLOCKED` (Sleep mode).
+   * Deselect the thread from the CPU scheduler so it consumes no power.
+
+### B. `sem_post()` (The Exit Gate)
+When a thread finishes using a resource, it executes these instructions:
+1. Check the semaphore's internal Waiting Queue.
+2. **IF** the Waiting Queue is **EMPTY**:
+   * Increment the counter by 1 (saving the token for the next arriving thread).
+3. **ELSE** (threads are actively sleeping on the bench):
+   * Pop **EXACTLY ONE** thread out from the front of the queue.
+   * Change that single thread's status to `READY`.
+   * Hand the resource token directly to that thread. 
+   * *(Note: The counter stays at 0 because the token was transferred instantly inside the kernel!)*
