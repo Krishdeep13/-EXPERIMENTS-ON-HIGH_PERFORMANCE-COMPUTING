@@ -1,0 +1,233 @@
+# Experiment 7: Dynamic Array Growth Strategies
+
+## Objective
+
+To investigate the performance tradeoff between memory utilization and reallocation overhead in dynamic arrays.
+
+Two growth strategies were implemented and benchmarked:
+
+1. Geometric Growth (Capacity Doubling)
+2. Linear Growth (Capacity Increment by One)
+
+Both implementations inserted 10,000,000 integers into a dynamically allocated array.
+
+---
+
+# Strategy 1: Capacity Doubling
+
+Whenever the array became full:
+
+```text
+capacity = capacity * 2
+```
+
+Capacity progression:
+
+```text
+1
+2
+4
+8
+16
+32
+64
+...
+16777216
+```
+
+### Final Output
+
+```text
+Size     = 10000000
+Capacity = 16777216
+Address  = 0x158000000
+Time     = 0.044246 seconds
+```
+
+### Observations
+
+Only a small number of reallocations occurred.
+
+The memory allocator was often able to expand the existing block in place.
+
+Example:
+
+```text
+Capacity = 1024
+Address  = 0x14e008200
+
+Capacity = 2048
+Address  = 0x14e008200
+```
+
+The address remained unchanged, indicating that no memory copy was required.
+
+At larger capacities, the allocator occasionally moved the block:
+
+```text
+Capacity = 2097152
+Address  = 0x150008000
+
+Capacity = 4194304
+Address  = 0x14e800000
+```
+
+In these cases:
+
+1. A larger memory region was allocated.
+2. Existing elements were copied.
+3. The old region was released.
+4. A new address was returned.
+
+---
+
+# Strategy 2: Linear Growth
+
+Whenever the array became full:
+
+```text
+capacity = capacity + 1
+```
+
+Capacity progression:
+
+```text
+1
+2
+3
+4
+5
+6
+...
+10000000
+```
+
+### Final Output
+
+```text
+Size     = 10000000
+Capacity = 10000000
+Time     = 0.197248 seconds
+```
+
+### Observations
+
+Memory utilization was perfect.
+
+No unused capacity existed after the final insertion.
+
+However, the allocator was forced to perform an extremely large number of reallocation operations.
+
+---
+
+# Performance Comparison
+
+### Capacity Doubling
+
+```text
+Execution Time = 0.044246 seconds
+```
+
+### Linear Growth
+
+```text
+Execution Time = 0.197248 seconds
+```
+
+### Speedup
+
+```text
+0.197248 / 0.044246
+≈ 4.46
+```
+
+Result:
+
+```text
+Capacity Doubling is approximately 4.5× faster
+than Linear Growth.
+```
+
+---
+
+# Memory Tradeoff
+
+Doubling Strategy:
+
+```text
+Size     = 10000000
+Capacity = 16777216
+```
+
+Unused Elements:
+
+```text
+16777216 - 10000000
+=
+6777216
+```
+
+Unused Memory:
+
+```text
+6777216 × 4 bytes
+≈ 27 MB
+```
+
+Linear Strategy:
+
+```text
+Unused Memory = 0
+```
+
+---
+
+# Key Insight
+
+The experiment demonstrates a fundamental systems-design principle:
+
+> Additional memory can be intentionally used to reduce expensive operations.
+
+The doubling strategy consumed approximately 27 MB of extra memory but achieved a performance improvement of roughly 4.5×.
+
+The linear strategy minimized memory usage but incurred significantly greater allocation and memory-management overhead.
+
+---
+
+# HPC Connection
+
+This experiment illustrates the same tradeoff found in High Performance Computing systems.
+
+Many HPC algorithms intentionally consume additional memory to reduce more expensive costs such as:
+
+* Memory movement
+* Synchronization
+* Communication
+* Reallocation
+* Cache misses
+
+Examples include:
+
+* Communication-Avoiding LU Factorization
+* Communication-Avoiding QR
+* Cache Blocking
+* Distributed Matrix Replication
+* Blocked Matrix Multiplication
+
+In all of these cases, memory is treated as a resource that can be exchanged for improved performance.
+
+---
+
+# Conclusion
+
+This experiment shows that memory utilization and execution speed are often competing objectives.
+
+A small increase in memory consumption can significantly reduce allocation overhead and improve overall performance.
+
+The capacity-doubling strategy demonstrates why modern dynamic array implementations such as:
+
+* C++ std::vector
+* Java ArrayList
+* Python List
+
+use geometric growth rather than linear growth.
