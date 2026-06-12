@@ -330,3 +330,80 @@ Algorithmic performance depends not only on the number of arithmetic operations 
 Two mathematically identical implementations can exhibit drastically different execution times solely because of differences in memory access patterns.
 
 This experiment reinforced the importance of cache locality, spatial locality, and memory-aware algorithm design in modern computer systems.
+
+
+
+## Side Note: Why Does the Innermost Loop Matter So Much?
+
+At first glance, it may seem surprising that merely changing the order of loop variables can change performance by nearly 50%, even though the total amount of arithmetic remains identical.
+
+The key observation is that the three loop variables operate at vastly different frequencies.
+
+For a matrix of size (N \times N):
+
+```text
+Outer loop   → N iterations
+Middle loop  → N² iterations
+Inner loop   → N³ iterations
+```
+
+Therefore, the processor experiences the memory access pattern dictated by the **innermost loop** approximately (N^3) times. The innermost loop effectively becomes the dominant behavior of the entire algorithm.
+
+If the innermost loop traverses memory sequentially:
+
+```text
+Row access
+↓
+Contiguous memory accesses
+↓
+Efficient cache line utilization
+↓
+Hardware prefetching becomes effective
+↓
+Higher memory bandwidth utilization
+↓
+Faster execution
+```
+
+However, if the innermost loop traverses memory vertically through columns:
+
+```text
+Column access
+↓
+Large jumps in memory addresses
+↓
+Frequent cache misses
+↓
+Poor spatial locality
+↓
+Reduced effectiveness of hardware prefetchers
+↓
+Processor stalls waiting for data
+↓
+Slower execution
+```
+
+The middle loop contributes intermediate behavior because its access pattern is repeated (N^2) times, while the outer loop contributes the least since it changes only (N) times.
+
+This experiment highlights an important principle of High Performance Computing:
+
+> The loop variable closest to the computation determines how the processor experiences memory.
+
+Consequently, mathematically identical algorithms can exhibit substantially different execution times because the innermost loop amplifies either cache-friendly or cache-hostile behavior across all (N^3) operations.
+
+Another perspective is to view the execution in terms of time scales:
+
+```text
+Outer loop:
+Changes slowly and has minimal influence.
+
+Middle loop:
+Moderately influences reuse patterns.
+
+Inner loop:
+Changes most rapidly and dominates memory behavior.
+```
+
+Thus, performance is governed not only by the number of arithmetic operations performed, but also by how those operations repeatedly interact with the memory hierarchy.
+
+> In modern processors, computation is relatively cheap; waiting for data is expensive.
