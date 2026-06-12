@@ -1,0 +1,490 @@
+# Matrix Multiplication Performance Study
+
+## From Loop Order to Memory Bandwidth Limits
+
+---
+
+# Goal of This Experiment
+
+I originally wanted to answer a very simple question:
+
+> Does changing the order of loops actually matter?
+
+I expected small differences.
+
+Instead, this experiment took me through:
+
+* Cache locality,
+* Loop ordering,
+* Matrix scaling,
+* Blocking,
+* Multithreading,
+* Memory bandwidth saturation.
+
+I eventually discovered that moving data is often more expensive than doing the actual computations.
+
+---
+
+# The Problem
+
+Suppose we want to multiply two square matrices:
+
+Matrix A × Matrix B = Matrix C
+
+If each matrix has:
+
+N rows and N columns,
+
+then every element of Matrix C is calculated by:
+
+* taking one row from Matrix A,
+* taking one column from Matrix B,
+* multiplying corresponding elements,
+* adding all of them together.
+
+---
+
+# How Much Computation Is Actually Happening?
+
+For an N × N matrix multiplication:
+
+There are:
+
+N × N elements in Matrix C.
+
+Each element requires:
+
+* N multiplications,
+* N additions.
+
+So total work is approximately:
+
+Total Operations
+
+= 2 × N³
+
+---
+
+For my largest experiment:
+
+N = 4096
+
+Therefore:
+
+Total Operations
+
+= 2 × 4096³
+
+= 137,438,953,472 operations
+
+≈ 137.44 billion operations
+
+≈ 137.44 GFLOPs of work.
+
+This means:
+
+> Even though the code looks simple, the processor is actually doing over 137 billion mathematical operations.
+
+---
+
+# Phase 1: Loop Ordering
+
+I tested six loop orders.
+
+IJK
+
+IKJ
+
+JIK
+
+JKI
+
+KIJ
+
+KJI
+
+using:
+
+N = 512
+
+---
+
+# Results
+
+| Loop Order | Execution Time |
+| ---------- | -------------: |
+| IJK        |        0.232 s |
+| IKJ        |        0.143 s |
+| JIK        |        0.228 s |
+| JKI        |        0.238 s |
+| KIJ        |        0.150 s |
+| KJI        |        0.235 s |
+
+---
+
+# What Surprised Me?
+
+The fastest version:
+
+IKJ
+
+was roughly
+
+1.6× faster
+
+than some of the slowest versions.
+
+The algorithm was exactly the same.
+
+The mathematics was exactly the same.
+
+Only the order of the loops changed.
+
+---
+
+# Why Did This Happen?
+
+Because the CPU does not read directly from RAM every time.
+
+Instead it uses:
+
+L1 Cache
+
+↓
+
+L2 Cache
+
+↓
+
+L3 Cache
+
+↓
+
+RAM
+
+The closer the memory is to the CPU:
+
+* the smaller it is,
+* the faster it is.
+
+---
+
+# What Makes IKJ Fast?
+
+In C, rows are stored continuously.
+
+For example:
+
+A[0][0], A[0][1], A[0][2] ...
+
+are adjacent in memory.
+
+IKJ walks through memory in this order.
+
+That means:
+
+* cache lines are reused,
+* fewer cache misses occur,
+* the CPU spends more time computing.
+
+---
+
+# Important Observation
+
+I noticed something interesting:
+
+> The variable closest to the actual computation affected performance the most.
+
+If the innermost loop walked through memory sequentially:
+
+the program became fast.
+
+If it jumped around memory:
+
+the CPU stalled.
+
+This taught me:
+
+> The order of loops determines whether the processor computes or waits.
+
+---
+
+# Phase 2: Scaling Matrix Size
+
+I then kept the best loop order and increased matrix size.
+
+---
+
+# Results
+
+| Matrix Size | Execution Time |
+| ----------: | -------------: |
+|     32 × 32 |     0.000174 s |
+|     64 × 64 |     0.000960 s |
+|   128 × 128 |     0.006724 s |
+|   256 × 256 |     0.038270 s |
+|   512 × 512 |     0.176229 s |
+| 1024 × 1024 |     1.231725 s |
+| 2048 × 2048 |     9.770896 s |
+| 4096 × 4096 |    79.413116 s |
+
+---
+
+# What Happened?
+
+Execution time exploded.
+
+At first I thought:
+
+"This is just because matrix multiplication is O(N³)."
+
+But that wasn't the whole story.
+
+As matrices became larger:
+
+they stopped fitting inside cache.
+
+The CPU had to fetch data from slower memory more often.
+
+---
+
+# What I Learned
+
+Performance depends on two things:
+
+1. Computation
+
+How much arithmetic is required.
+
+2. Data Movement
+
+How much information must travel through the memory hierarchy.
+
+As matrices grow:
+
+data movement becomes increasingly important.
+
+---
+
+# Phase 3: Blocking
+
+I then divided the matrices into smaller chunks.
+
+Instead of processing the whole matrix at once,
+
+I processed smaller tiles.
+
+The idea was:
+
+> Keep smaller working sets inside cache.
+
+---
+
+# Blocking Results
+
+| Block Size | Execution Time |
+| ---------: | -------------: |
+|          4 |       113.67 s |
+|          8 |       101.90 s |
+|         16 |        92.68 s |
+|         32 |        86.96 s |
+|         64 |        85.04 s |
+|        128 |        84.80 s |
+
+---
+
+# Observation
+
+Blocking helped,
+
+but not dramatically.
+
+Larger blocks performed better.
+
+However,
+
+even the best blocked version was still slow.
+
+Why?
+
+Because the matrices were simply too large.
+
+RAM accesses still dominated.
+
+---
+
+# Phase 4: Multithreading
+
+I then divided the work among multiple threads.
+
+Each thread computed different rows of Matrix C.
+
+Since threads wrote to separate rows,
+
+no synchronization was needed.
+
+---
+
+# Results
+
+| Threads | Block Size | Execution Time |
+| ------: | ---------: | -------------: |
+|       1 |        128 |        84.80 s |
+|       8 |        128 |        11.39 s |
+|      16 |        128 |         8.04 s |
+|      32 |        128 |         8.04 s |
+|      64 |        128 |         8.10 s |
+
+---
+
+# Speedup
+
+8 threads:
+
+84.80 ÷ 11.39
+
+≈ 7.44× faster
+
+---
+
+16 threads:
+
+84.80 ÷ 8.04
+
+≈ 10.55× faster
+
+---
+
+# Actual Performance
+
+Using:
+
+137.44 GFLOPs of total work,
+
+I calculated:
+
+Single thread:
+
+≈ 1.62 GFLOPS
+
+8 threads:
+
+≈ 12.06 GFLOPS
+
+16 threads:
+
+≈ 17.09 GFLOPS
+
+---
+
+# Then Something Strange Happened
+
+I expected:
+
+More Threads
+
+↓
+
+More Speed
+
+But this stopped happening.
+
+16 threads:
+
+8.04 s
+
+32 threads:
+
+8.04 s
+
+64 threads:
+
+8.10 s
+
+Nothing improved.
+
+---
+
+# Why?
+
+I had reached the machine's limit.
+
+The bottleneck shifted.
+
+Before:
+
+The CPU lacked enough arithmetic power.
+
+Now:
+
+The CPU had enough arithmetic power,
+
+but could not obtain data quickly enough.
+
+RAM became the limiting factor.
+
+---
+
+# Memory Bandwidth Saturation
+
+This phenomenon is called:
+
+Memory Bandwidth Saturation.
+
+It means:
+
+> The processor spends more time waiting for data than performing calculations.
+
+At this point:
+
+Adding more threads does not help.
+
+The memory subsystem becomes the bottleneck.
+
+---
+
+# The Biggest Lesson
+
+I started with:
+
+"Does loop order matter?"
+
+I ended up discovering:
+
+Loop Order
+
+↓
+
+Cache Locality
+
+↓
+
+Matrix Scaling
+
+↓
+
+Blocking
+
+↓
+
+Multithreading
+
+↓
+
+Memory Bandwidth Saturation
+
+---
+
+# Final Conclusion
+
+This experiment taught me one of the most important lessons in High Performance Computing:
+
+> Modern processors are incredibly fast at arithmetic.
+
+The real challenge is getting the right data to the processor at the right time.
+
+In many cases,
+
+moving data is more expensive than computing on it.
+
+Understanding how memory behaves is therefore just as important as understanding algorithms themselves.
