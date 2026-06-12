@@ -1,0 +1,241 @@
+# Experiment 9: Matrix Size Scaling and the Memory Wall
+
+## Objective
+
+To investigate how matrix multiplication performance changes as matrix dimensions increase and to observe the effect of the processor's memory hierarchy (L1 cache, L2 cache, L3 cache, and DRAM) on execution time.
+
+---
+
+## Hypothesis
+
+The computational complexity of naive matrix multiplication is:
+
+```text
+O(N³)
+```
+
+Therefore, doubling the matrix dimension should ideally increase execution time by:
+
+```text
+(2N)³ / N³ = 8×
+```
+
+However, modern processors rely heavily on cache hierarchies. Once the working data exceeds cache capacity, memory movement costs may dominate computation, causing execution times to deviate from ideal cubic scaling.
+
+---
+
+## Experimental Setup
+
+* Matrix multiplication performed using the cache-friendly `IKJ` loop ordering.
+* Matrices initialized with random integer values.
+* Execution time measured using `clock_gettime()`.
+* Matrix dimensions progressively increased.
+* All matrices stored in row-major order.
+
+The total working set approximately consisted of:
+
+```text
+Matrix A + Matrix B + Matrix C
+≈ 3 × N² × sizeof(int)
+≈ 12N² bytes
+```
+
+assuming 4-byte integers.
+
+---
+
+## Results
+
+| Matrix Size (N×N) | Zeroes  | Ones    | Execution Time (s) | Growth from Previous |
+| ----------------- | ------- | ------- | ------------------ | -------------------- |
+| 32 × 32           | 493     | 531     | 0.000141           | —                    |
+| 64 × 64           | 2046    | 2050    | 0.001510           | 10.71×               |
+| 128 × 128         | 8172    | 8212    | 0.007706           | 5.10×                |
+| 256 × 256         | 32768   | 32768   | 0.036910           | 4.79×                |
+| 512 × 512         | 131113  | 131031  | 0.237476           | 6.43×                |
+| 1024 × 1024       | 524579  | 523997  | 1.867006           | 7.86×                |
+| 2056 × 2056       | 2095987 | 2098317 | 18.293316          | 9.80×                |
+| 4096 × 4096       | 8386943 | 8390273 | 356.169542         | 19.47×               |
+
+---
+
+## Theoretical Expectation
+
+Pure arithmetic complexity predicts:
+
+```text
+Doubling N → Execution Time × 8
+```
+
+because:
+
+```text
+Matrix multiplication performs O(N³) operations.
+```
+
+If computation alone determined performance, all growth factors would remain close to 8.
+
+---
+
+## Observations
+
+The experimental results deviated significantly from ideal cubic scaling.
+
+### Small Matrices (32–256)
+
+Execution time increased relatively smoothly.
+
+The processor was able to retain a large fraction of the working data inside the cache hierarchy.
+
+Performance was primarily determined by arithmetic throughput.
+
+```text
+Compute-bound regime.
+```
+
+---
+
+### Medium Matrices (512–1024)
+
+Execution times began increasing more rapidly.
+
+Estimated working sets:
+
+```text
+512 × 512  → approximately 3 MB
+1024 × 1024 → approximately 12 MB
+```
+
+At these sizes:
+
+* L1 cache was exceeded.
+* L2 cache effectiveness decreased.
+* L3 cache became increasingly important.
+
+Both arithmetic operations and memory traffic contributed significantly to execution time.
+
+```text
+Mixed compute-memory regime.
+```
+
+---
+
+### Large Matrices (2056–4096)
+
+Estimated working sets:
+
+```text
+2056 × 2056 → approximately 50 MB
+4096 × 4096 → approximately 201 MB
+```
+
+Execution times grew dramatically:
+
+```text
+1024 → 2056 : 1.87 s → 18.29 s
+2056 → 4096 : 18.29 s → 356.17 s
+```
+
+The observed growth factor reached:
+
+```text
+19.47×
+```
+
+instead of the theoretically expected:
+
+```text
+8×
+```
+
+At this point, the processor spent much of its time waiting for data to arrive from main memory.
+
+```text
+Memory-bound regime.
+```
+
+---
+
+## Interpretation
+
+The experiment revealed three distinct performance regions:
+
+### Region 1: Compute-Bound
+
+```text
+Small matrices
+↓
+Most data fits in cache
+↓
+Arithmetic dominates
+```
+
+---
+
+### Region 2: Transition Region
+
+```text
+Medium matrices
+↓
+Caches begin overflowing
+↓
+Memory traffic increases
+↓
+Both computation and data movement matter
+```
+
+---
+
+### Region 3: Memory-Bound
+
+```text
+Large matrices
+↓
+Working set exceeds cache hierarchy
+↓
+DRAM accesses dominate
+↓
+Processor stalls waiting for data
+```
+
+---
+
+## Key Insight
+
+This experiment demonstrates that algorithmic complexity alone is insufficient to predict real-world performance.
+
+Although matrix multiplication requires:
+
+```text
+O(N³)
+```
+
+operations, the cost of moving data through the memory hierarchy eventually dominates the cost of performing arithmetic.
+
+The processor transitions from:
+
+```text
+"Compute-limited"
+
+to
+
+"Memory-limited."
+```
+
+as the problem size increases.
+
+---
+
+## Conclusion
+
+This experiment provided direct empirical evidence of the **memory wall**.
+
+Without using hardware profilers or cache specifications, simply varying matrix size revealed how processor performance changes across different levels of the memory hierarchy.
+
+The results support one of the central principles of High Performance Computing:
+
+> Moving data efficiently is often more important than performing arithmetic efficiently.
+
+Two implementations with identical mathematical complexity can exhibit vastly different performance depending on how effectively they utilize the cache hierarchy.
+
+As problem sizes grow, memory behavior becomes the dominant factor governing execution time.
