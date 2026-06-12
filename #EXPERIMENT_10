@@ -1,0 +1,369 @@
+# When Blocking Fails: A Study in Identifying the Real Bottleneck
+
+## Initial Assumption
+
+After observing that the `IKJ` loop ordering significantly outperformed the other five loop permutations, the next logical optimization appeared to be **cache blocking (tiling)**.
+
+The hypothesis was:
+
+> Since blocking is widely used in high-performance matrix multiplication libraries, applying blocking to the already cache-friendly IKJ algorithm should produce an additional speedup.
+
+However, the experiments revealed something unexpected.
+
+---
+
+## Experimental Setup
+
+### Baseline Algorithm (Naive IKJ)
+
+```c
+for (int i = 0; i < N; i++) {
+    for (int k = 0; k < N; k++) {
+
+        int r = A[i][k];
+
+        for (int j = 0; j < N; j++) {
+            C[i][j] += r * B[k][j];
+        }
+    }
+}
+```
+
+Characteristics:
+
+* Row-major memory layout.
+* Register reuse through `r`.
+* Sequential traversal of B.
+* Sequential traversal of C.
+
+Matrix Size:
+
+```text
+N = 4096
+```
+
+Measured Time:
+
+```text
+56.61 seconds
+```
+
+---
+
+## Blocked Implementation
+
+The blocked version used:
+
+```c
+for(ii)
+    for(kk)
+        for(jj)
+            for(i)
+                for(k)
+                    for(j)
+```
+
+with varying block sizes.
+
+---
+
+## Results
+
+| Block Size | Execution Time |
+| ---------: | -------------: |
+|          4 |       113.67 s |
+|          8 |       101.90 s |
+|         16 |        92.68 s |
+|         32 |        86.96 s |
+|         64 |        85.04 s |
+|        128 |        84.80 s |
+
+Baseline IKJ:
+
+| Method    |        Time |
+| --------- | ----------: |
+| Naive IKJ | **56.61 s** |
+
+---
+
+## First Observation
+
+Increasing block size consistently improved the blocked implementation:
+
+```text
+113 s
+↓
+102 s
+↓
+93 s
+↓
+87 s
+↓
+85 s
+↓
+85 s
+```
+
+This suggests that:
+
+> Smaller tiles suffer from excessive loop overhead.
+
+The blocked algorithm introduces three additional loops:
+
+```text
+ii
+kk
+jj
+```
+
+resulting in six nested loops instead of three.
+
+This causes:
+
+* More branch evaluations,
+* More index arithmetic,
+* More loop-control instructions.
+
+For small block sizes, the overhead dominates.
+
+---
+
+## Second Observation
+
+The improvement eventually saturated:
+
+```text
+BS = 32 → 86.96 s
+BS = 64 → 85.04 s
+BS = 128 → 84.80 s
+```
+
+Beyond a certain point, increasing block size provided almost no additional benefit.
+
+This indicates:
+
+> The blocked implementation had already extracted whatever locality improvement it could offer.
+
+---
+
+## The Unexpected Result
+
+Even the best blocked implementation remained significantly slower than the naive IKJ version.
+
+Best blocked result:
+
+```text
+84.80 s
+```
+
+Naive IKJ:
+
+```text
+56.61 s
+```
+
+Ratio:
+
+```text
+84.80 / 56.61 ≈ 1.50× slower
+```
+
+---
+
+# Why Did Blocking Fail?
+
+The answer lies in the baseline algorithm itself.
+
+The naive IKJ implementation already exhibited excellent locality.
+
+---
+
+## Matrix A
+
+```text
+A[i][k]
+```
+
+loaded once:
+
+```c
+int r = A[i][k];
+```
+
+and reused across the entire inner loop.
+
+This maximized register reuse.
+
+---
+
+## Matrix B
+
+Access pattern:
+
+```text
+B[k][0]
+B[k][1]
+B[k][2]
+...
+```
+
+which corresponds to sequential row traversal in row-major storage.
+
+---
+
+## Matrix C
+
+Updated as:
+
+```text
+C[i][0]
+C[i][1]
+C[i][2]
+...
+```
+
+also sequential.
+
+---
+
+## Hardware Prefetchers
+
+The CPU observes a smooth memory stream:
+
+```text
+→→→→→→→→→→→→
+```
+
+and begins fetching future cache lines before they are requested.
+
+Effectively:
+
+> The hardware was already performing part of the optimization automatically.
+
+---
+
+# What Blocking Changed
+
+Blocking transformed the access pattern from:
+
+```text
+Long continuous streams
+```
+
+into:
+
+```text
+Small chunks
+↓
+Jump
+↓
+Small chunks
+↓
+Jump
+```
+
+Consequences:
+
+* Reduced effectiveness of hardware prefetching,
+* Additional loop overhead,
+* Increased branch instructions.
+
+Thus:
+
+```text
+Blocking Overhead
+>
+Blocking Benefit
+```
+
+for this particular algorithm and architecture.
+
+---
+
+# The Core Insight
+
+This experiment demonstrates a fundamental principle of performance engineering:
+
+> Optimizations only help when they target an actual bottleneck.
+
+The IKJ algorithm had already addressed the major locality issue.
+
+Blocking attempted to solve a problem that no longer significantly existed.
+
+---
+
+# Why Blocking Still Matters
+
+This does **not** mean blocking is useless.
+
+Blocking becomes valuable when:
+
+### 1. Poor Loop Orders
+
+For example:
+
+```text
+IJK
+```
+
+which traverses columns of B.
+
+Blocking can dramatically improve locality.
+
+---
+
+### 2. Multi-Core Execution
+
+Tiles become natural units of work for thread scheduling.
+
+---
+
+### 3. Register-Level Microkernels
+
+Modern BLAS implementations use multiple layers of blocking:
+
+```text
+L3 blocking
+↓
+L2 blocking
+↓
+L1 blocking
+↓
+Register blocking
+```
+
+to exploit every level of the memory hierarchy.
+
+---
+
+# Final Conclusion
+
+The expectation was:
+
+```text
+IKJ
+↓
+Blocking
+↓
+Faster execution
+```
+
+The experiments instead showed:
+
+```text
+IKJ
+↓
+Hardware already exploits locality
+↓
+Blocking introduces overhead
+↓
+Slower execution
+```
+
+This result highlights an important lesson:
+
+> The existence of an optimization in textbooks does not guarantee that it improves performance in every context.
+
+True high-performance computing requires identifying the actual bottleneck before applying optimizations.
+
+Sometimes, the simplest algorithm aligned with the hardware is already the best solution.
