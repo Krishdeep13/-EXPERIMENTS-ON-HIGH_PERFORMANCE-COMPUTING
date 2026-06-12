@@ -1,236 +1,166 @@
-# Experiment 8 : Effect of Loop Ordering on Matrix Multiplication Performance
+# Matrix Multiplication Loop Permutation Study (N = 512)
 
 ## Objective
 
-To investigate how different loop permutations in matrix multiplication affect execution time despite performing exactly the same mathematical computation.
+Investigate how loop ordering affects the performance of matrix multiplication on a row-major architecture by keeping the arithmetic operation identical while changing only the traversal pattern through memory.
 
----
+The experiment was performed using:
 
-## Background
+* Matrix size: **512 × 512**
+* Data type: `int`
+* Three matrices: `A`, `B`, and `C`
+* Row-major memory layout (C language)
+* Execution time measured using `clock_gettime()`
 
-For matrix multiplication,
+The multiplication computed was:
 
 [
-C[i][j] = C[i][j] + A[i][k] \times B[k][j]
+C[i][j] += A[i][k] \times B[k][j]
 ]
-
-three nested loops are required, controlled by the indices:
-
-* **i** → row index
-* **j** → column index
-* **k** → accumulation index
-
-Since matrix multiplication is associative with respect to the accumulation order, the three loops can be arranged in six different ways:
-
-```
-ijk
-ikj
-jik
-jki
-kij
-kji
-```
-
-All six versions perform exactly the same number of arithmetic operations and produce mathematically identical results.
-
-However, they traverse memory differently.
-
----
-
-## Hypothesis
-
-I expected the loop orders that access matrix elements sequentially in memory to perform better due to improved cache utilization.
-
-Specifically:
-
-* **Fastest:** ikj, kij
-* **Moderate:** ijk, jik
-* **Slowest:** jki, kji
-
----
-
-## Experimental Setup
-
-* Same randomly initialized matrices were used.
-* Same matrix dimensions were maintained throughout the experiment.
-* Same compiler settings were used.
-* Only the loop ordering was changed.
-* Execution time was measured using:
-
-```c
-clock_gettime(CLOCK_MONOTONIC, ...)
-```
 
 ---
 
 ## Results
 
-| Loop Order | Execution Time (s) |
-| ---------- | -----------------: |
-| IKJ        |       **0.175217** |
-| KIJ        |       **0.180747** |
-| JIK        |           0.228664 |
-| IJK        |           0.229067 |
-| KJI        |           0.259329 |
-| JKI        |           0.259775 |
+| Loop Order | Inner Loop | Register Reuse      | Execution Time (s) |
+| ---------- | ---------- | ------------------- | -----------------: |
+| IJK        | k          | No                  |           0.232152 |
+| IKJ        | j          | Yes (`r = A[i][k]`) |       **0.142534** |
+| JIK        | k          | No                  |           0.228326 |
+| JKI        | i          | Yes (`r = B[k][j]`) |           0.237951 |
+| KIJ        | j          | Yes (`r = A[i][k]`) |           0.149822 |
+| KJI        | i          | Yes (`r = B[k][j]`) |           0.235154 |
 
 ---
 
-## Relative Performance
+## Performance Ranking
 
-Taking IKJ as the baseline:
+### Fastest
 
-| Loop Order | Relative Slowdown |
-| ---------- | ----------------: |
-| IKJ        |             1.00× |
-| KIJ        |             1.03× |
-| JIK        |             1.31× |
-| IJK        |             1.31× |
-| KJI        |             1.48× |
-| JKI        |             1.48× |
+```
+IKJ  : 0.142534 s
+KIJ  : 0.149822 s
+```
 
 ---
 
-## Theoretical Explanation
-
-### 1. Row-Major Memory Layout
-
-In C, two-dimensional arrays are stored in **row-major order**.
-
-This means:
+### Medium
 
 ```
-A[0][0], A[0][1], A[0][2], ...
-A[1][0], A[1][1], A[1][2], ...
+JIK  : 0.228326 s
+IJK  : 0.232152 s
 ```
-
-are placed consecutively in memory.
-
-Therefore:
-
-* Horizontal traversal through a row is cache friendly.
-* Vertical traversal through a column causes large memory jumps.
 
 ---
 
-### 2. Why IKJ Was Fastest
+### Slowest
 
-Structure:
-
-```c
-for(i)
-    for(k)
-        for(j)
+```
+KJI  : 0.235154 s
+JKI  : 0.237951 s
 ```
 
-Innermost loop:
+---
 
-```c
-j
+## Relative Speedup
+
+Compared to the fastest implementation (IKJ):
+
+### IJK
+
+```
+0.232152 / 0.142534 ≈ 1.63× slower
 ```
 
-accesses:
+---
+
+### JIK
+
+```
+0.228326 / 0.142534 ≈ 1.60× slower
+```
+
+---
+
+### JKI
+
+```
+0.237951 / 0.142534 ≈ 1.67× slower
+```
+
+---
+
+### KJI
+
+```
+0.235154 / 0.142534 ≈ 1.65× slower
+```
+
+---
+
+## Interpretation
+
+Although all six implementations perform exactly the same mathematical computation:
+
+[
+C_{ij} = \sum_k A_{ik}B_{kj}
+]
+
+their performance differs significantly because the order of traversal changes how efficiently the CPU accesses memory.
+
+---
+
+## Why IKJ and KIJ Are Fast
+
+These orders make the innermost loop iterate over `j`.
+
+This produces:
+
+### Matrix B
 
 ```
 B[k][0], B[k][1], B[k][2], ...
+```
+
+which corresponds to contiguous row traversal in row-major memory.
+
+---
+
+### Matrix C
+
+```
 C[i][0], C[i][1], C[i][2], ...
 ```
 
-Both are stored sequentially in memory.
-
-This allows:
-
-* Efficient cache line utilization,
-* Hardware prefetching,
-* Reduced cache misses.
-
-Additionally,
-
-```c
-A[i][k]
-```
-
-is loaded once and reused throughout the entire inner loop.
+which is also contiguous.
 
 ---
 
-### 3. Why KIJ Performed Similarly
+### Register Reuse
 
-Structure:
-
-```c
-for(k)
-    for(i)
-        for(j)
-```
-
-Again,
-
-```c
-j
-```
-
-is the innermost loop.
-
-Therefore:
-
-```
-B[k][j]
-```
-
-and
-
-```
-C[i][j]
-```
-
-are traversed sequentially.
-
-Although
+A single element
 
 ```
 A[i][k]
 ```
 
-moves vertically, only a single value is reused repeatedly during the inner loop.
+is loaded once:
 
-Consequently, the performance penalty is small.
+```c
+int r = A[i][k];
+```
+
+and reused throughout the entire inner loop.
+
+This minimizes memory traffic and maximizes register utilization.
 
 ---
 
-### 4. Why IJK and JIK Were Moderate
+## Why IJK and JIK Are Slower
 
-Structure:
+The innermost loop iterates over `k`.
 
-```c
-for(i)
-    for(j)
-        for(k)
-```
-
-or
-
-```c
-for(j)
-    for(i)
-        for(k)
-```
-
-The innermost loop traverses:
-
-```
-A[i][k]
-```
-
-efficiently across rows.
-
-However,
-
-```
-B[k][j]
-```
-
-is accessed down columns:
+For matrix B, the access pattern becomes:
 
 ```
 B[0][j]
@@ -239,171 +169,104 @@ B[2][j]
 ...
 ```
 
-which causes repeated cache misses.
+which walks down a column.
 
-At the same time,
+Because matrices are stored row-by-row in memory, this causes repeated jumps across memory locations.
 
-```
-C[i][j]
-```
+Consequences:
 
-remains fixed.
-
-Thus, these orders exhibit mixed behavior and intermediate performance.
+* Poor spatial locality
+* Increased cache misses
+* Reduced effectiveness of hardware prefetchers
 
 ---
 
-### 5. Why JKI and KJI Were Slowest
+## Why JKI and KJI Are Slowest
 
-Structures:
+The innermost loop iterates over `i`.
 
-```c
-for(j)
-    for(k)
-        for(i)
-```
-
-and
-
-```c
-for(k)
-    for(j)
-        for(i)
-```
-
-Innermost loop:
-
-```c
-i
-```
-
-moves vertically through memory.
-
-Both:
+This causes accesses such as:
 
 ```
-A[i][k]
+A[0][k]
+A[1][k]
+A[2][k]
+...
 ```
 
 and
 
 ```
-C[i][j]
+C[0][j]
+C[1][j]
+C[2][j]
+...
 ```
 
-are accessed down columns.
+which both move vertically through row-major matrices.
 
-This produces:
+As a result:
 
-* Poor spatial locality,
-* Frequent cache misses,
-* Reduced effectiveness of hardware prefetching.
-
-As a result, these loop orders performed worst.
+* Multiple matrices suffer from poor locality simultaneously.
+* Cache lines are underutilized.
+* Memory latency dominates execution.
 
 ---
 
 ## Key Observation
 
-All six implementations performed exactly the same mathematical computation and executed approximately the same number of arithmetic operations.
+The arithmetic performed by all six versions is identical.
 
-The only difference was the order in which memory was accessed.
-
-Yet, the slowest implementation was approximately:
+The only difference is:
 
 ```
-48%
+How data moves through memory.
 ```
 
-slower than the fastest implementation.
+This experiment demonstrates that:
+
+> Matrix multiplication performance is often determined less by the number of multiplications and additions, and more by how effectively the algorithm exploits the memory hierarchy.
 
 ---
 
-## Conclusion
+## Memory Hierarchy Insight
 
-This experiment demonstrates a fundamental principle of High Performance Computing:
+Performance optimization occurs across several layers:
 
-> Computation is relatively cheap; moving data efficiently through the memory hierarchy is expensive.
-
-Algorithmic performance depends not only on the number of arithmetic operations performed but also on how effectively the algorithm utilizes the cache hierarchy.
-
-Two mathematically identical implementations can exhibit drastically different execution times solely because of differences in memory access patterns.
-
-This experiment reinforced the importance of cache locality, spatial locality, and memory-aware algorithm design in modern computer systems.
-
-
-
-## Side Note: Why Does the Innermost Loop Matter So Much?
-
-At first glance, it may seem surprising that merely changing the order of loop variables can change performance by nearly 50%, even though the total amount of arithmetic remains identical.
-
-The key observation is that the three loop variables operate at vastly different frequencies.
-
-For a matrix of size (N \times N):
-
-```text
-Outer loop   → N iterations
-Middle loop  → N² iterations
-Inner loop   → N³ iterations
+```
+Arithmetic Operations
+        ↓
+Register Reuse
+        ↓
+L1 Cache Locality
+        ↓
+L2/L3 Cache Locality
+        ↓
+Main Memory Access
 ```
 
-Therefore, the processor experiences the memory access pattern dictated by the **innermost loop** approximately (N^3) times. The innermost loop effectively becomes the dominant behavior of the entire algorithm.
+Changing loop order does not alter the arithmetic workload.
 
-If the innermost loop traverses memory sequentially:
+Instead, it changes how efficiently these layers are utilized.
 
-```text
-Row access
-↓
-Contiguous memory accesses
-↓
-Efficient cache line utilization
-↓
-Hardware prefetching becomes effective
-↓
-Higher memory bandwidth utilization
-↓
-Faster execution
+---
+
+## Final Conclusion
+
+For row-major systems:
+
+```
+IKJ ≈ KIJ
+    ↓
+IJK ≈ JIK
+    ↓
+JKI ≈ KJI
 ```
 
-However, if the innermost loop traverses memory vertically through columns:
+Loop permutations that:
 
-```text
-Column access
-↓
-Large jumps in memory addresses
-↓
-Frequent cache misses
-↓
-Poor spatial locality
-↓
-Reduced effectiveness of hardware prefetchers
-↓
-Processor stalls waiting for data
-↓
-Slower execution
-```
+* stream horizontally through memory,
+* maximize register reuse, and
+* reuse cache lines effectively,
 
-The middle loop contributes intermediate behavior because its access pattern is repeated (N^2) times, while the outer loop contributes the least since it changes only (N) times.
-
-This experiment highlights an important principle of High Performance Computing:
-
-> The loop variable closest to the computation determines how the processor experiences memory.
-
-Consequently, mathematically identical algorithms can exhibit substantially different execution times because the innermost loop amplifies either cache-friendly or cache-hostile behavior across all (N^3) operations.
-
-Another perspective is to view the execution in terms of time scales:
-
-```text
-Outer loop:
-Changes slowly and has minimal influence.
-
-Middle loop:
-Moderately influences reuse patterns.
-
-Inner loop:
-Changes most rapidly and dominates memory behavior.
-```
-
-Thus, performance is governed not only by the number of arithmetic operations performed, but also by how those operations repeatedly interact with the memory hierarchy.
-
-> In modern processors, computation is relatively cheap; waiting for data is expensive.
+deliver significantly better performance despite producing exactly the same mathematical result.
