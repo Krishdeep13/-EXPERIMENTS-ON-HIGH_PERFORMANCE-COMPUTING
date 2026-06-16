@@ -1,0 +1,28 @@
+#include <arm_neon.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+void vector_add_neon(int *A,int *B,int *C,int size){
+for(int i=0;i<size;i=i+4){
+int32x4_t vecA=vld1q_s32(&A[i]);
+int32x4_t vecB=vld1q_s32(&B[i]);
+int32x4_t vecC=vaddq_s32(vecA,vecB);
+vst1q_s32(&C[i],vecC);
+
+}
+}
+int main(){
+int A[4]={1,2,3,4};
+int B[4]={1,2,3,4};
+int *C=malloc(4*sizeof(int));
+if(C==NULL){
+return 1;
+}
+vector_add_neon(A,B,C,4);
+
+for(int i=0;i<4;i++){
+printf("%d ",C[i]);
+}
+free(C);
+return 0;
+}
