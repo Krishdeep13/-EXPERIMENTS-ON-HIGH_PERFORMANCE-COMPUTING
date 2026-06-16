@@ -26,3 +26,42 @@ printf("%d ",C[i]);
 free(C);
 return 0;
 }
+-----------------------------------------------------------------------
+#include <arm_neon.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+void matrix_fma(int *A, int scale_factor,int *C,int size){
+int i=0;
+int32x4_t s=vdupq_n_s32(scale_factor);
+for( i=0;i<size-(size%4);i=i+4){
+int32x4_t vecA=vld1q_s32(&A[i]);
+int32x4_t vecC=vld1q_s32(&C[i]);
+vecC=vmlaq_s32(vecC,vecA,s);
+vst1q_s32(&C[i],vecC);
+
+}
+for(;i<size;i++){
+C[i]+=A[i]*scale_factor;
+}
+}
+int main(){
+int size=6;
+int A[6]={1,2,3,4,5,6};
+int scale=10;
+int *C=malloc(size*sizeof(int));
+if (C==NULL){
+return 1;
+}
+for(int i=0;i<size;i++){
+C[i]=2*i;
+
+}
+matrix_fma(A,scale,C,size);
+for(int i=0;i<size;i++){
+printf("%d ",C[i]);
+
+}
+free(C);
+return 0;
+}
