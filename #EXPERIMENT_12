@@ -27,6 +27,8 @@ free(C);
 return 0;
 }
 -----------------------------------------------------------------------
+
+
 #include <arm_neon.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,4 +66,81 @@ printf("%d ",C[i]);
 }
 free(C);
 return 0;
+}
+----------------------------------------------------------------------------------------------------
+
+
+#include <arm_neon.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+void transpose(int *B, int *Bt, int N) {
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            Bt[j * N + i] = B[i * N + j];
+        }
+    }
+}
+
+void matmul_neon_transpose(int *A, int *Bt, int *C, int N) {
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            int32x4_t vec_accumulator = vdupq_n_s32(0);
+            int k = 0;
+            
+            for (k = 0; k <= N - 4; k += 4) {
+                int32x4_t vecA = vld1q_s32(&A[i * N + k]);
+                int32x4_t vecB = vld1q_s32(&Bt[j * N + k]);
+                vec_accumulator = vmlaq_s32(vec_accumulator, vecA, vecB);
+            }
+            
+            int scalar_sum = vaddvq_s32(vec_accumulator);
+            
+            for (; k < N; k++) {
+                scalar_sum += A[i * N + k] * Bt[j * N + k];
+            }
+            
+            C[i * N + j] = scalar_sum;
+        }
+    }
+}
+
+int main() {
+    int N = 4;
+    int size = N * N;
+    
+    int A[16] = {
+        1, 2, 3, 4,
+        5, 6, 7, 8,
+        9, 10, 11, 12,
+        13, 14, 15, 16
+    };
+    
+    int B[16] = {
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1
+    };
+    
+    int *Bt = malloc(size * sizeof(int));
+    int *C = malloc(size * sizeof(int));
+    if (Bt == NULL || C == NULL) {
+        return 1;
+    }
+    
+    transpose(B, Bt, N);
+    
+    matmul_neon_transpose(A, Bt, C, N);
+    
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            printf("%d\t", C[i * N + j]);
+        }
+        printf("\n");
+    }
+    
+    free(Bt);
+    free(C);
+    return 0;
 }
